@@ -6,7 +6,7 @@ const db = require("../data/db");
 const { sendVerificationEmail } = require("../utils/mailer");
 const { buildOtpAuthUrl, generateBase32Secret, verifyTotp } = require("../utils/totp");
 
-const JWT_SECRET = process.env.JWT_SECRET || "pwdconnect_secret_key_change_this";
+const JWT_SECRET = process.env.JWT_SECRET || "PWDConnectPH_2026_x7Kp92LmQ4vTzPrivateSecret";
 const VERIFICATION_MINUTES = 15;
 
 function createToken(payload, expiresIn = "8h") {
@@ -158,6 +158,7 @@ exports.register = async (req, res) => {
             ...(!mail.sent ? devCodePayload(code) : {})
           });
         } catch (mailErr) {
+          console.error("Verification email send failed:", mailErr.message);
           res.status(201).json({
             message: "The account is not created yet. The verification email could not be sent, so please resend the code.",
             pending_id: this.lastID,
@@ -252,6 +253,7 @@ exports.resendVerification = (req, res) => {
           ...(!mail.sent ? devCodePayload(code) : {})
         });
       } catch (mailErr) {
+        console.error("Verification email resend failed:", mailErr.message);
         res.json({
           message: "Verification email could not be sent, so the development code is shown here.",
           emailSent: false,

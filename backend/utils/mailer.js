@@ -2,12 +2,17 @@ const nodemailer = require("nodemailer");
 
 function getTransportConfig() {
   const user = process.env.GMAIL_USER || process.env.SMTP_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS || process.env.SMTP_PASS;
+  const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS || process.env.SMTP_PASS;
 
-  if (!user || !pass) return null;
+  if (!user || !rawPass) return null;
+
+  const service = process.env.SMTP_SERVICE || "gmail";
+  const pass = service.toLowerCase() === "gmail"
+    ? rawPass.replace(/\s+/g, "")
+    : rawPass;
 
   return {
-    service: process.env.SMTP_SERVICE || "gmail",
+    service,
     auth: { user, pass }
   };
 }
