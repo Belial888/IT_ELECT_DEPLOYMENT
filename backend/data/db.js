@@ -4,11 +4,13 @@ const fs = require("fs");
 const path = require("path");
 
 const dataDir = __dirname;
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+const dbPath = process.env.SQLITE_DB_PATH || path.join(dataDir, "pwdconnect.db");
+const dbDir = path.dirname(dbPath);
+
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const dbPath = path.join(dataDir, "pwdconnect.db");
 const db = new sqlite3.Database(dbPath);
 
 function ensureColumn(table, column, definition) {
