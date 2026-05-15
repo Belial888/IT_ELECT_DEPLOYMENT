@@ -226,7 +226,31 @@ db.serialize(() => {
       const hashedPassword = await bcrypt.hash("admin12345", 10);
       db.run(
         "INSERT INTO admins (name, username, password, role) VALUES (?, ?, ?, ?)",
-        ["System Administrator", "admin", hashedPassword, "admin"]
+        ["System Administrator", "admin", hashedPassword, "admin"],
+        function(err) {
+          if (err) {
+            console.error("Error inserting admin:", err);
+            return;
+          }
+          const adminId = this.lastID;
+          // Insert announcements after admin is created
+          db.get("SELECT COUNT(*) AS count FROM announcements", [], (err, row) => {
+            if (row && row.count === 0) {
+              const announcements = [
+                ["New Wheelchair Grant Program", "New wheelchair assistance program is now available. Eligible users may apply through Browse Services."],
+                ["System Maintenance Scheduled", "The portal may be temporarily unavailable during scheduled maintenance."],
+                ["Updated Application Guidelines", "Please review the updated guidelines before submitting a service application."]
+              ];
+
+              announcements.forEach((announcement) => {
+                db.run(
+                  "INSERT INTO announcements (admin_id, title, content) VALUES (?, ?, ?)",
+                  [adminId, announcement[0], announcement[1]]
+                );
+              });
+            }
+          });
+        }
       );
     }
   });
@@ -251,22 +275,7 @@ db.serialize(() => {
     }
   });
 
-  db.get("SELECT COUNT(*) AS count FROM announcements", [], (err, row) => {
-    if (row && row.count === 0) {
-      const announcements = [
-        ["New Wheelchair Grant Program", "New wheelchair assistance program is now available. Eligible users may apply through Browse Services."],
-        ["System Maintenance Scheduled", "The portal may be temporarily unavailable during scheduled maintenance."],
-        ["Updated Application Guidelines", "Please review the updated guidelines before submitting a service application."]
-      ];
 
-      announcements.forEach((announcement) => {
-        db.run(
-          "INSERT INTO announcements (admin_id, title, content) VALUES (?, ?, ?)",
-          [1, announcement[0], announcement[1]]
-        );
-      });
-    }
-  });
 });
 
 module.exports = db;
