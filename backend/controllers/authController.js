@@ -8,6 +8,7 @@ const { buildOtpAuthUrl, generateBase32Secret, verifyTotp } = require("../utils/
 
 const JWT_SECRET = process.env.JWT_SECRET || "PWDConnectPH_2026_x7Kp92LmQ4vTzPrivateSecret";
 const VERIFICATION_MINUTES = 15;
+const SHOW_DEV_VERIFICATION_CODE = process.env.SHOW_DEV_VERIFICATION_CODE === "true";
 
 function createToken(payload, expiresIn = "8h") {
   return jwt.sign(payload, JWT_SECRET, { expiresIn });
@@ -92,7 +93,7 @@ function storeVerificationCode(userId, email, code, callback) {
 }
 
 function devCodePayload(code) {
-  if (process.env.NODE_ENV === "production") return {};
+  if (process.env.NODE_ENV === "production" && !SHOW_DEV_VERIFICATION_CODE) return {};
   return { devVerificationCode: code };
 }
 

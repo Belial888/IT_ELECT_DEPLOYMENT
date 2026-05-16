@@ -31,6 +31,8 @@ GMAIL_APP_PASSWORD=your_gmail_app_password
 MAIL_FROM=PWDConnect PH <your_email@gmail.com>
 SQLITE_DB_PATH=/opt/render/project/src/storage/pwdconnect.db
 UPLOADS_DIR=/opt/render/project/src/storage/uploads
+# Optional for demo only, if Gmail SMTP is not sending:
+# SHOW_DEV_VERIFICATION_CODE=true
 ```
 
 Persistent disk:
@@ -122,3 +124,31 @@ SQLITE_DB_PATH=/opt/render/project/src/storage/pwdconnect.db
 UPLOADS_DIR=/opt/render/project/src/storage/uploads
 ```
 
+### Verification code does not work after deployment
+
+Check these first:
+
+1. In Render, make sure `JWT_SECRET` is set and does not change between deployments. The verification code hash uses this secret.
+2. Make sure the persistent disk is mounted at `/opt/render/project/src/storage`.
+3. Make sure these backend environment variables are set:
+
+```env
+SQLITE_DB_PATH=/opt/render/project/src/storage/pwdconnect.db
+UPLOADS_DIR=/opt/render/project/src/storage/uploads
+```
+
+4. For Gmail verification emails, use a Gmail App Password, not the normal Gmail password:
+
+```env
+GMAIL_USER=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_16_character_app_password
+MAIL_FROM=PWDConnect PH <your_email@gmail.com>
+```
+
+5. If this is only for a demo and Gmail SMTP is not sending, add this Render backend environment variable:
+
+```env
+SHOW_DEV_VERIFICATION_CODE=true
+```
+
+Then redeploy the backend. The registration response will show the verification code on the frontend when email delivery fails. Do not enable this for a real production system.

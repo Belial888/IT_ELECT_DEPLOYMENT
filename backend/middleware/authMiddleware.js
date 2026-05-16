@@ -10,7 +10,7 @@ function verifyToken(req, res, next) {
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "pwdconnect_secret_key_change_this");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "PWDConnectPH_2026_x7Kp92LmQ4vTzPrivateSecret");
     req.user = decoded;
     next();
   } catch (error) {
