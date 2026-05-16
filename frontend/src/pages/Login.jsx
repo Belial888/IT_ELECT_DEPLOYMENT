@@ -37,7 +37,7 @@ export default function Login() {
           username: err.response.data.username || form.username,
           email: err.response.data.email
         });
-        setError(err.response.data.message || "Please verify your Gmail code before signing in.");
+        setError(verificationMessage(err.response.data, "Please verify your Gmail code before signing in."));
         return;
       }
       setError(err.response?.data?.message || "Login failed");

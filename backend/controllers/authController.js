@@ -97,6 +97,32 @@ function devCodePayload(code) {
   return { devVerificationCode: code };
 }
 
+async function sendVerificationChallenge(res, { status = 403, username, email, name, code, sentMessage, failedMessage }) {
+  try {
+    const mail = await sendVerificationEmail({ to: email, name, code });
+    res.status(status).json({
+      message: mail.sent
+        ? sentMessage
+        : "Email sender is not configured, so the verification code was logged on the server.",
+      requiresEmailVerification: true,
+      username,
+      email,
+      emailSent: mail.sent,
+      ...(!mail.sent ? devCodePayload(code) : {})
+    });
+  } catch (mailErr) {
+    console.error("Verification email send failed:", mailErr.message);
+    res.status(status).json({
+      message: failedMessage,
+      requiresEmailVerification: true,
+      username,
+      email,
+      emailSent: false,
+      ...devCodePayload(code)
+    });
+  }
+}
+
 exports.register = async (req, res) => {
   try {
     const { name, disability_type, contact_info, address, username, password } = req.body;
@@ -185,7 +211,41 @@ exports.verifyEmail = (req, res) => {
   }
 
   db.get("SELECT * FROM pending_registrations WHERE username = ?", [username], (err, pending) => {
-    if (err || !pending) return res.status(404).json({ message: "Pending registration not found. Please register again." });
+    if (err) return res.status(500).json({ message: "Failed to check verification code" });
+
+    if (!pending) {
+      db.get("SELECT * FROM users WHERE username = ? AND email_verified = 0", [username], (userErr, user) => {
+        if (userErr) return res.status(500).json({ message: "Failed to check verification code" });
+        if (!user) return res.status(404).json({ message: "Pending registration not found. Please register again." });
+        if (!user.email_verification_code_hash || !user.email_verification_expires_at) {
+          return res.status(400).json({ message: "No active verification code. Please resend the code." });
+        }
+        if (new Date(user.email_verification_expires_at).getTime() < Date.now()) {
+          return res.status(400).json({ message: "Verification code expired. Please resend the code." });
+        }
+
+        const expected = Buffer.from(user.email_verification_code_hash);
+        const received = Buffer.from(hashCode(code, user.email || ""));
+        if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) {
+          return res.status(400).json({ message: "Invalid verification code" });
+        }
+
+        db.run(
+          `UPDATE users
+           SET email_verified = 1,
+               email_verification_code_hash = NULL,
+               email_verification_expires_at = NULL
+           WHERE user_id = ?`,
+          [user.user_id],
+          (updateErr) => {
+            if (updateErr) return res.status(500).json({ message: "Failed to verify account" });
+            res.json({ message: "Email verified. You can now sign in.", user_id: user.user_id });
+          }
+        );
+      });
+      return;
+    }
+
     if (!pending.verification_code_hash || !pending.verification_expires_at) {
       return res.status(400).json({ message: "No active verification code. Please resend the code." });
     }
@@ -281,17 +341,33 @@ exports.login = (req, res) => {
     }
 
     if (!account && role !== "admin") {
-      db.get("SELECT username, email FROM pending_registrations WHERE username = ?", [username], (pendingErr, pending) => {
+      db.get("SELECT pending_id, name, username, email FROM pending_registrations WHERE username = ?", [username], (pendingErr, pending) => {
         if (pendingErr || !pending) {
           return res.status(401).json({ message: "Invalid credentials" });
         }
 
-        return res.status(403).json({
-          message: "Please verify your Gmail code to create your account.",
-          requiresEmailVerification: true,
-          username: pending.username,
-          email: pending.email
-        });
+        const code = createVerificationCode();
+        db.run(
+          `UPDATE pending_registrations
+           SET verification_code_hash = ?, verification_expires_at = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE pending_id = ?`,
+          [
+            hashCode(code, pending.email),
+            new Date(Date.now() + VERIFICATION_MINUTES * 60 * 1000).toISOString(),
+            pending.pending_id
+          ],
+          async (updateErr) => {
+            if (updateErr) return res.status(500).json({ message: "Failed to create verification code" });
+            await sendVerificationChallenge(res, {
+              username: pending.username,
+              email: pending.email,
+              name: pending.name || pending.username,
+              code,
+              sentMessage: "Please verify your Gmail code to create your account. A new code was sent.",
+              failedMessage: "Please verify your account. The verification email could not be sent, so use the code shown here."
+            });
+          }
+        );
       });
       return;
     }
@@ -306,11 +382,26 @@ exports.login = (req, res) => {
     }
 
     if (role !== "admin" && !account.email_verified) {
-      return res.status(403).json({
-        message: "Please verify your Gmail code before signing in.",
-        requiresEmailVerification: true,
-        username: account.username,
-        email: account.email
+      if (!account.email) {
+        return res.status(403).json({
+          message: "Please verify your email before signing in, but this account has no email address saved.",
+          requiresEmailVerification: true,
+          username: account.username,
+          email: account.email
+        });
+      }
+
+      const code = createVerificationCode();
+      return storeVerificationCode(account[idField], account.email, code, async (storeErr) => {
+        if (storeErr) return res.status(500).json({ message: "Failed to create verification code" });
+        await sendVerificationChallenge(res, {
+          username: account.username,
+          email: account.email,
+          name: account.name || account.username,
+          code,
+          sentMessage: "Please verify your Gmail code before signing in. A new code was sent.",
+          failedMessage: "Please verify your account. The verification email could not be sent, so use the code shown here."
+        });
       });
     }
 
